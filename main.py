@@ -11,32 +11,52 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-LOG_FORMAT = "%(asctime)s %(levelname)-5s %(message)s (%(name)-12s)"
+LOG_FORMAT = "[%(asctime)s] %(levelname)-5s %(message)s (%(name)s)"
 
 # config ディレクトリ作成
 Path("config").mkdir(parents=True, exist_ok=True)
 
 ############################################################
 class AppConfig:
-    _env_path = Path("config/app-config.env")
-    log_level = "DEBUG"
-    whisper_model = "large-v3" #"base"
+    _ENV_PATH = Path("config/app-config.env")
+
+    host="0.0.0.0",
+    port=8000,
+
+    log_level = "INFO"
+    whisper_model = "large-v3"
 
     @classmethod
     def load(cls):
-        load_dotenv(dotenv_path=cls._env_path, override=True)
-        cls.log_level = os.getenv("LOG_LEVEL")
-        cls.whisper_model = os.getenv("WHISPER_MODEL")
+        load_dotenv(dotenv_path=cls._ENV_PATH, override=True)
+        cls.host = os.getenv("HOST", "0.0.0.0")
+        cls.port = int(os.getenv("PORT", "8000"))
+        cls.log_level = os.getenv("LOG_LEVEL", "INFO")
+        cls.whisper_model = os.getenv("WHISPER_MODEL", "large-v3")
+
     @classmethod
     def save(cls):
-        set_key(dotenv_path=cls._env_path, key_to_set="LOG_LEVEL", value_to_set=cls.log_level)
-        set_key(dotenv_path=cls._env_path, key_to_set="WHISPER_MODEL", value_to_set=cls.whisper_model)
+        set_key(dotenv_path=cls._ENV_PATH, key_to_set="LOG_LEVEL", value_to_set=cls.log_level, quote_mode='never')
+        set_key(dotenv_path=cls._ENV_PATH, key_to_set="WHISPER_MODEL", value_to_set=cls.whisper_model, quote_mode='never')
+        set_key(dotenv_path=cls._ENV_PATH, key_to_set="HOST", value_to_set=cls.host, quote_mode='never')
+        set_key(dotenv_path=cls._ENV_PATH, key_to_set="PORT", value_to_set=str(cls.port), quote_mode='never')
+
+    @classmethod
+    def exists(cls):
+        return os.path.isfile(cls._ENV_PATH)
+
+############################################################
 
 # 設定ファイル読み込み
-AppConfig.load()
+if not AppConfig.exists():
+    AppConfig.save()
+else:
+    AppConfig.load()
+
 
 # Whisper モデルを指定
 WHISPER_MODEL = AppConfig.whisper_model
+os.environ["WHISPER_MODEL"] = WHISPER_MODEL
 
 # ログレベルを設定
 try:
@@ -76,10 +96,25 @@ logger.info(f"Whisper model is '{WHISPER_MODEL}'")
 # Sample web site
 ############################################################
 
+# app.mount("/public", StaticFiles(directory="public", html=True), name="public")
+# app.mount("/js", StaticFiles(directory="public/js", html=True), name="public/js")
+# app.mount("/css", StaticFiles(directory="public/css", html=True), name="public/css")
+def mount_public_directory(root):
+    # ディレクトリ配下の静的ファイルをマウント
+    app.mount(f"/{root}", StaticFiles(directory=root, html=True), name="public")
+    public_sub_dirs = [
+        d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))
+    ]
+
+    # サブディレクトリ配下の静的ファイルをマウント
+    for public_sub_dir in public_sub_dirs:
+        #print(f"{root}/{public_sub_dir}")
+        app.mount(f"/{public_sub_dir}", StaticFiles(directory=f"{root}/{public_sub_dir}", html=True), name=f"{root}/{public_sub_dir}")
+
 # 静的ファイルをマウント
-app.mount("/public", StaticFiles(directory="public", html=True), name="public")
-app.mount("/js", StaticFiles(directory="public/js", html=True), name="public/js")
-app.mount("/css", StaticFiles(directory="public/css", html=True), name="public/css")
+mount_public_directory("public")
+
+
 
 @app.get("/")
 async def read_index():
@@ -186,9 +221,9 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
-        port=8000,
+        host=AppConfig.host,
+        port=AppConfig.port,
         reload=True,
         log_config=None,
-        log_level=None#AppConfig.log_level
+        log_level=None
     )

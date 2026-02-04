@@ -153,7 +153,9 @@ try:
     # large-v3（多言語、最新強化版：Mel128 & Cantonese トークン対応）
     ############################################################3
 
-    if 'WHISPER_MODEL' not in globals():
+    import os
+    WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+    if not WHISPER_MODEL:
         WHISPER_MODEL = "base"
 
     # ~/.cache/whisper
